@@ -203,6 +203,8 @@ export default class ProxySandbox implements SandBox {
     this.type = SandBoxType.Proxy;
     const { updatedValueSet } = this;
 
+    // fakeWindow 浅拷贝了window的属性 
+    // propertiesWithGetter window上有get属性的映射, 就是在window上有值 key => true
     const { fakeWindow, propertiesWithGetter } = createFakeWindow(globalContext);
 
     const descriptorTargetMap = new Map<PropertyKey, SymbolTarget>();

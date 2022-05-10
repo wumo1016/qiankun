@@ -42,6 +42,7 @@ export function patchAtMounting(
   return patchersInSandbox[sandbox.type]?.map((patch) => patch());
 }
 
+// 处理样式
 export function patchAtBootstrapping(
   appName: string,
   elementGetter: () => HTMLElement | ShadowRoot,
