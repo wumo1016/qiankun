@@ -74,6 +74,7 @@ function createElement(
   containerElement.innerHTML = appContent;
   // appContent always wrapped with a singular div
   const appElement = containerElement.firstChild as HTMLElement;
+  // 样式隔离
   if (strictStyleIsolation) {
     if (!supportShadowDOM) {
       console.warn(
@@ -93,7 +94,11 @@ function createElement(
       shadow.innerHTML = innerHTML;
     }
   }
-
+  // 样式隔离
+  /* 
+  <style> body { background: red; }</style> 所有样式前面都加一个 div[data-qiankun="m-vue"]
+  <style>div[data-qiankun="m-vue"] { background: red; }</style>
+  */
   if (scopedCSS) {
     const attr = appElement.getAttribute(css.QiankunCSSRewriteAttr);
     if (!attr) {
@@ -163,7 +168,7 @@ function getRender(appInstanceId: string, appContent: string, legacyRender?: HTM
 
       return legacyRender({ loading, appContent: element ? appContent : '' });
     }
-
+    // 获取父应用用来放置子应用的容器
     const containerElement = getContainer(container!);
 
     // The container might have be removed after micro app unmounted.
@@ -184,9 +189,9 @@ function getRender(appInstanceId: string, appContent: string, legacyRender?: HTM
       })();
       assertElementExist(containerElement, errorMsg);
     }
-
+    // 如果 container 容器不包含 当前子应用的的 div
     if (containerElement && !containerElement.contains(element)) {
-      // clear the container
+      // 先清空 container
       while (containerElement!.firstChild) {
         rawRemoveChild.call(containerElement, containerElement!.firstChild);
       }
@@ -241,13 +246,20 @@ let prevAppUnmountedDeferred: Deferred<void>;
 
 export type ParcelConfigObjectGetter = (remountContainer?: string | HTMLElement) => ParcelConfigObject;
 
+/* app
+container: "#container"
+entry: "//localhost:3001"
+name: "m-vue"
+props: undefined
+*/
+
 export async function loadApp<T extends ObjectType>(
   app: LoadableApp<T>,
   configuration: FrameworkConfiguration = {},
   lifeCycles?: FrameworkLifeCycles<T>,
 ): Promise<ParcelConfigObjectGetter> {
   const { entry, name: appName } = app;
-  const appInstanceId = genAppInstanceIdByName(appName);
+  const appInstanceId = genAppInstanceIdByName(appName); // "m-vue"
 
   const markName = `[qiankun] App ${appInstanceId} Loading`;
   if (process.env.NODE_ENV === 'development') {
@@ -263,6 +275,45 @@ export async function loadApp<T extends ObjectType>(
   } = configuration;
 
   // get the entry html content and script executor
+
+/* template
+"
+<!DOCTYPE html>
+<html lang="">
+  <head>
+    <meta charset="utf-8">
+    <meta http-equiv="X-UA-Compatible" content="IE=edge">
+    <meta name="viewport" content="width=device-width,initial-scale=1.0">
+    <link rel="icon" href="//localhost:3001/favicon.ico">
+    <title>
+      m-vue
+    </title>
+    <style>
+      body {
+        background: red;
+      }
+    </style>
+    <!--  script //localhost:3001/js/chunk-vendors.js replaced by import-html-entry -->
+    <!--  script //localhost:3001/js/app.js replaced by import-html-entry -->
+  </head>
+
+  <body>
+    <noscript>
+      <strong>We're sorry but m-vue doesn't work properly without JavaScript enabled.
+        Please enable it to continue.</strong>
+    </noscript>
+    <div id="app"></div>
+  </body>
+</html>
+"
+*/
+ /* execScripts
+ function execScripts(proxy, strictGlobal)
+ */
+/* assetPublicPath
+"http://localhost:3001/"
+*/
+ // entry => "//localhost:3001" importEntryOpts => { prefetch: true }
   const { template, execScripts, assetPublicPath } = await importEntry(entry, importEntryOpts);
 
   // as single-spa load and bootstrap new app parallel with other apps unmounting
@@ -271,6 +322,41 @@ export async function loadApp<T extends ObjectType>(
   if (await validateSingularMode(singular, app)) {
     await (prevAppUnmountedDeferred && prevAppUnmountedDeferred.promise);
   }
+  /* appContent
+"
+<div id="__qiankun_microapp_wrapper_for_m_vue__" data-name="m-vue" data-version="2.7.0">
+  <!DOCTYPE html>
+    <html lang="">
+
+    <head>
+      <meta charset="utf-8">
+      <meta http-equiv="X-UA-Compatible" content="IE=edge">
+      <meta name="viewport" content="width=device-width,initial-scale=1.0">
+      <link rel="icon" href="//localhost:3001/favicon.ico">
+      <title>
+        m-vue
+      </title>
+      <style>
+        body {
+          background: red;
+        }
+      </style>
+      <!--  script //localhost:3001/js/chunk-vendors.js replaced by import-html-entry -->
+      <!--  script //localhost:3001/js/app.js replaced by import-html-entry -->
+    </head>
+
+    <body>
+      <noscript>
+        <strong>We're sorry but m-vue doesn't work properly without JavaScript enabled.
+          Please enable it to continue.</strong>
+      </noscript>
+      <div id="app"></div>
+    </body>
+
+    </html>
+  </div>
+"
+  */
 
   const appContent = getDefaultTplWrapper(appInstanceId)(template);
 
@@ -336,8 +422,22 @@ export async function loadApp<T extends ObjectType>(
     beforeLoad = [],
   } = mergeWith({}, getAddOns(global, assetPublicPath), lifeCycles, (v1, v2) => concat(v1 ?? [], v2 ?? []));
 
+  // 执行 beforeLoad 
   await execHooksChain(toArray(beforeLoad), app, global);
-
+ 
+  /* 
+  - 执行 _execScripts(entry, scripts, proxy, { fetch, strictGlobal, beforeExec, afterExec })
+    - entry 
+      - "//localhost:3001/js/app.js"
+    - scripts
+      - "//localhost:3001/js/chunk-vendors.js"
+      - "//localhost:3001/js/app.js"
+    - proxy 即沙箱
+    - opts
+  - _getExternalScripts(scripts, fetch)
+  - 遍历 scripts 执行 fetchScript(script)
+  - 使用 fetch(utl) 请求资源
+  */
   // get the lifecycle hooks from module exports
   const scriptExports: any = await execScripts(global, sandbox && !useLooseSandbox);
   const { bootstrap, mount, unmount, update } = getLifecyclesFromExports(

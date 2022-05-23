@@ -83,6 +83,7 @@ export function patchStrictSandbox(
   scopedCSS = false,
   excludeAssetFilter?: CallableFunction,
 ): Freer {
+  
   let containerConfig = proxyAttachContainerConfigMap.get(proxy);
   if (!containerConfig) {
     containerConfig = {
